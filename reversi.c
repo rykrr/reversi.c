@@ -103,7 +103,7 @@ void quit();
 void help();
 void end();
 
-void count(int[2]);
+int  count(int[2]);
 
 
 /* BEGIN PROGRAM */
@@ -407,6 +407,45 @@ void flip(int x, int y, char p) {
             fchk(x+c, y-c, p, &c);
 }
 
+#define CORNER(c,i) (ptlist.cor[i][2]!=0 && c<ptlist.cor[i][2])
+
+int corner() {
+    int corner = -1;
+    int cpoten = 0;
+    
+    for(int i=0; i<BOARD_SIZE; i++) {
+        if(ptlist.cor[i][0]==0
+        && ptlist.cor[i][1]==0) {
+            if(CORNER(cpoten,i)) {
+                cpoten=ptlist.cor[i][2];
+                corner=0;
+            }
+        }
+        if(ptlist.cor[i][0]==BOARD_SIZE-1
+        && ptlist.cor[i][1]==0) {
+            if(CORNER(cpoten,i)) {
+                cpoten=ptlist.cor[i][2];
+                corner=1;
+            }
+        }
+        if(ptlist.cor[i][0]==0
+        && ptlist.cor[i][1]==BOARD_SIZE-1) {
+            if(CORNER(cpoten,i)) {
+                cpoten=ptlist.cor[i][2];
+                corner=2;
+            }
+        }
+        if(ptlist.cor[i][0]==BOARD_SIZE-1
+        && ptlist.cor[i][1]==BOARD_SIZE-1) {
+            if(CORNER(cpoten,i)) {
+                cpoten=ptlist.cor[i][2];
+                corner=3;
+            }
+        }
+    }
+    return corner;
+}
+
 int cond_mode(int b, int s, int a) {
     switch(mode) {
         case 0:
@@ -426,18 +465,45 @@ void best(int points[2]) {
     points[0] = ptlist.cor[0][0];
     points[1] = ptlist.cor[0][1];
     
-    if(mode == 2) {
+    if(mode == 1) {
         for(int i=0; i<p; i++)
             a += ptlist.cor[i][2];
         a = a / p;
     }
     
-    for(int i=(mode<3?0:(p==1?0:p-1)); i<p; i++) {
-        int s = ptlist.cor[i][2];
-        if(cond_mode(best,s,a)) {
-            best = s;
-            points[0] = ptlist.cor[i][0];
-            points[1] = ptlist.cor[i][1];
+    int c = 0;
+    if(mode == 2) {
+        c = corner();
+        switch(c) {
+            case 0:
+                points[0] = 0;
+                points[1] = 0;
+                break;
+            case 1:
+                points[0] = BOARD_SIZE-1;
+                points[1] = 0;
+                break;
+            case 2:
+                points[0] = 0;
+                points[1] = BOARD_SIZE-1;
+                break;
+            case 3:
+                points[0] = BOARD_SIZE-1;
+                points[1] = BOARD_SIZE-1;
+                break;
+            default:
+                break;
+        }
+    }
+    
+    if(mode!=2 || c == -1) {
+        for(int i=(mode<3?0:(p==1?0:p-1)); i<p; i++) {
+            int s = ptlist.cor[i][2];
+            if(cond_mode(best,s,a)) {
+                best = s;
+                points[0] = ptlist.cor[i][0];
+                points[1] = ptlist.cor[i][1];
+            }
         }
     }
 }
@@ -482,6 +548,7 @@ void init() {
     attroff(A_REVERSE|A_BOLD);
     
     print_board();
+    
     count(CNUL);
 }
 
@@ -491,7 +558,7 @@ void clear_row(int x) {
 }
 
 void skip(char p) {
-    clear_row(dim.x-1);
+    STATUS (clear_row(dim.x-1));
     STATUS (
         mvprintw(dim.x-1, 1, 
                 "No moves, turn goes to %c. "
@@ -577,7 +644,7 @@ void quit() {
     count(CNUL);
 }
 
-void count(int score[2]) {
+int count(int score[2]) {
     score[0] = 0;
     score[1] = 0;
     
@@ -598,25 +665,25 @@ void count(int score[2]) {
                 YSP, score[1]);
     );
     
-    if(score[0] == 0 || score[1] == 0)
-        end();
+    return (score[0] == 0 || score[1] == 0);
 }
 
 void play() {
     
     int no_op = 0;
+    int e = 0;
     new_board();
     print_board();
     
     count(CNUL);
     
-    while(!check_board() && no_op != 4) {
+    while(!check_board() && no_op != 4 && !e) {
         qkchk(XSP);
         
         #ifdef AUTO_TEST
         
         usleep(AUTO_TEST);
-        if(0<ptlist.len) {
+        if(0<ptlist.len && !e) {
             int bst[2];
             best(bst);
             board[bst[0]][bst[1]] = XSP;
@@ -710,9 +777,9 @@ void play() {
             board[X][Y] = XSP;
             flip(X, Y, XSP);
             
-            count(CNUL);
+            e = count(CNUL);
         }
-        else {
+        else if(!e) {
             no_op++;
             skip(YSP);
         }
@@ -727,7 +794,7 @@ void play() {
         #endif
         
         qkchk(YSP);
-        if(0<ptlist.len) {
+        if(0<ptlist.len && !e) {
             no_op = 0;
             
             int bst[2];
@@ -737,7 +804,7 @@ void play() {
             
             count(CNUL);
         }
-        else {
+        else if(!e) {
             no_op++;
             skip(XSP);
         }
@@ -757,7 +824,7 @@ int main(int argc, char* argv[]) {
     do { 
         printf("Please Enter An Even Board Size (<=%d): ", MAX_BOARD_SIZE);
         scanf("%d", &size);
-    } while(!(4 < size && size < MAX_BOARD_SIZE));
+    } while(!(4 < size && size <= MAX_BOARD_SIZE));
     BOARD_SIZE = size;
     new_board();
     init();
