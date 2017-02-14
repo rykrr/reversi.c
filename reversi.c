@@ -18,8 +18,8 @@
 #include <unistd.h>
 #include <stdio.h>
 
-#ifndef BOARD_SIZE
-#define BOARD_SIZE 16
+#ifndef MAX_BOARD_SIZE
+#define MAX_BOARD_SIZE 50
 #endif
 
 #define ESP '-'
@@ -41,9 +41,11 @@
     }
 
 /* GLOBAL */
-char board[BOARD_SIZE][BOARD_SIZE];
+char board[MAX_BOARD_SIZE][MAX_BOARD_SIZE];
 
 int X = 0, Y = 0;
+
+int BOARD_SIZE = MAX_BOARD_SIZE;
 
 int TOP_PAD = 0, LEFT_PAD = 0;
 
@@ -66,7 +68,7 @@ struct {
 } dim;
 
 struct {
-    int cor[BOARD_SIZE*BOARD_SIZE][3];
+    int cor[MAX_BOARD_SIZE*MAX_BOARD_SIZE][3];
     int len;
 } ptlist;
 
@@ -748,6 +750,15 @@ void play() {
 }
 
 int main(int argc, char* argv[]) {
+    printf("Reversi.c :: Ryan Kerr 2017\n");
+    printf("Press F1 for in-game help\n");
+    
+    int size = 0;
+    do { 
+        printf("Please Enter An Even Board Size (<=%d): ", MAX_BOARD_SIZE);
+        scanf("%d", &size);
+    } while(!(4 < size && size < MAX_BOARD_SIZE));
+    BOARD_SIZE = size;
     new_board();
     init();
     for(;;) play();

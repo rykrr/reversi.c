@@ -20,10 +20,10 @@ Features:
 | 2         | Increase Delay        |
 
 ### Compiler Flags
-| Flag          | Description                       | Default Value |
-| ------------- | --------------------------------- | ------------- |
-| BOARD_SIZE    | Set board size (prefer even)      | 16            |
-| DEFAULT_MODE  | Set default difficulty            | 0 (easy)      |
-| AUTO_TEST     | Game plays itself (sets delay)    | Not set       |
+| Flag              | Description                       | Default Value |
+| ----------------- | --------------------------------- | ------------- |
+| MAX_BOARD_SIZE    | Set board size (prefer even)      | 16            |
+| DEFAULT_MODE      | Set default difficulty            | 0 (easy)      |
+| AUTO_TEST         | Game plays itself (sets delay)    | Not set       |
 
 This program was written for fun (and to learn ncurses).
