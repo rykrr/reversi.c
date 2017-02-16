@@ -105,6 +105,7 @@ void end();
 
 int  count(int[2]);
 
+//void predict(int*,int);
 
 /* BEGIN PROGRAM */
 int shift(int a, int b, int p) {
@@ -457,6 +458,30 @@ int cond_mode(int b, int s, int a) {
     }
 }
 
+int bias(int s, int i) {
+    int good = 0;
+    int bad  = 0;
+    
+    for(int j=0; j<2; j++) {
+        int c = ptlist.cor[i][j];
+        if(c == 1 || c == BOARD_SIZE-2) {
+            s = 0;
+        }
+        if(c < (BOARD_SIZE)/2-1) {
+            if(c%2==0) good++;
+            else bad++;
+        }
+        else if(c < (BOARD_SIZE)/2) {
+            if(c%2==1) good++;
+            else bad++;
+        }
+    }
+    
+    if(good==2) s *= 2;
+    return s;
+}
+
+
 void best(int points[2]) {
     int p = ptlist.len;
     int a = 0;
@@ -499,6 +524,7 @@ void best(int points[2]) {
     if(mode!=2 || c == -1) {
         for(int i=(mode<3?0:(p==1?0:p-1)); i<p; i++) {
             int s = ptlist.cor[i][2];
+            if(mode == 2) s = bias(s,i);
             if(cond_mode(best,s,a)) {
                 best = s;
                 points[0] = ptlist.cor[i][0];
