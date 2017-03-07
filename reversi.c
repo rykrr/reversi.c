@@ -51,7 +51,7 @@ int TOP_PAD = 0, LEFT_PAD = 0;
 
 int mode = DEFAULT_MODE%4;
 
-unsigned int wait = 1;
+unsigned int delay = 1;
 
 int CNUL[2];
 
@@ -85,9 +85,9 @@ int  check_board();
 void clear_row();
 int  cond_mode(int,int,int);
 
-struct chk chk_d(int, int, char);
-struct chk chk_x(int, int, char);
-struct chk chk_y(int, int, char);
+struct chk chk_d(int, int, char, int);
+struct chk chk_x(int, int, char, int);
+struct chk chk_y(int, int, char, int);
 
 int  check(int, int, char, int*);
 void qkchk(char);
@@ -119,16 +119,16 @@ void poten(int i, int e, int m, int t, int *v) {
     if(i&m && e&m) *v+=t;
 }
 
-void swchk(int x, int y, char p, int *i, int *e, int *c, int m, int *t) {
+void swchk(int x, int y, char p, int *i, int *e, int *f, int m, int *t) {
     
     switch(board[x][y]) {
         case ESP:
         case '%':
-            *c=-512;
+            *f=-512;
             break;
         case XSP:
             if(p == XSP) { 
-                *c=-512;
+                *f=-512;
                 *e|=m; 
             }
             else { 
@@ -138,7 +138,7 @@ void swchk(int x, int y, char p, int *i, int *e, int *c, int m, int *t) {
             break;
         case YSP:
             if(p == YSP) { 
-                *c=-512;
+                *f=-512;
                 *e|=m; 
             }
             else { 
@@ -223,89 +223,74 @@ int check_board() {
     return 1;
 }
 
-struct chk chk_d(int x, int y, char p) {
-    int inv = 0;
-    int end = 0;
-    int score = 0;
-    int mask;
-    int ptn;
-    
-    ptn = 0;
-    mask = 1;
-    for(int c=0; 0<=c && -1<(x-c) && -1<(y-c); c++)
-        if((x-c) != x && (y-c) != y)
-            swchk(x-c, y-c, p, &inv, &end, &c, mask, &ptn);
-    poten(inv, end, mask, ptn, &score);
-    
-    ptn = 0;
-    mask = 2;
-    for(int c=0; 0<=c && (x+c)<BOARD_SIZE && (y+c)<BOARD_SIZE && c!=-1; c++)
-        if((x+c) != x && (y+c) != y)
-            swchk(x+c, y+c, p, &inv, &end, &c, mask, &ptn);
-    poten(inv, end, mask, ptn, &score);
-    
-    ptn = 0;
-    mask = 4;
-    for(int c=0; 0<=c && -1<(x-c) && (y+c)<BOARD_SIZE; c++)
-        if((x-c) != x && (y+c) != y)
-            swchk(x-c, y+c, p, &inv, &end, &c, mask, &ptn);
-    poten(inv, end, mask, ptn, &score);
-    
-    ptn = 0;
-    mask = 8;
-    for(int c=0; 0<=c && -1<(y-c) && (x+c)<BOARD_SIZE; c++)
-        if((x+c) != x && (y-c) != y)
-            swchk(x+c, y-c, p, &inv, &end, &c, mask, &ptn);
-    poten(inv, end, mask, ptn, &score);
-    
-    struct chk c = { inv, end, shift(inv, end, mask), score };
-    return c;
+void fchk(int x, int y, char p, int *f) {
+    if(board[x][y] == p)
+        *f = -512;
+    else if(board[x][y] != ESP)
+        board[x][y] = p;
+    else
+        *f = -512;
 }
 
-struct chk chk_x(int x, int y, char p) {
-    int inv = 0;
-    int end = 0;
-    int score = 0;
-    int mask;
+#define DCHK(c,k) (-1<c && -1<k && c<BOARD_SIZE && k<BOARD_SIZE)
+
+void dchk(struct chk *out, int x, int y, int dx, int dy, int *mask, char p, int g) {
+    
+    int c = x+dx, k = y+dy, fin=0;
     int ptn = 0;
     
-    ptn = 0;
-    mask = 1;
-    for(int c=x-1; 0<=c; c--)
-        swchk(c, y, p, &inv, &end, &c, mask, &ptn);
-    poten(inv, end, mask, ptn, &score);
+    while(DCHK(c,k) && !fin) {
+        
+        if(g<=0) {
+            swchk(c, k, p, &(out->inv), &(out->end), &fin, *mask, &ptn);
+        }
+        else {
+            if(out->inv&*mask&&out->end&*mask)
+                fchk(c, k, p, &fin);
+        }
+        
+        c += dx;
+        k += dy;
+    }
     
-    ptn = 0;
-    mask = 2;
-    for(int c=x+1; 0<=c && c<BOARD_SIZE; c++) 
-        swchk(c, y, p, &inv, &end, &c, mask, &ptn);
-    poten(inv, end, mask, ptn, &score);
+    if(g<0)
+        dchk(out, x, y, dx, dy, mask, p, 1);
     
-    struct chk c = { inv, end, shift(inv, end, mask), score };
-    return c;
+    poten(out->inv, out->end, *mask, ptn, &(out->ptn));
+    out->val = shift(out->inv, out->end, *mask);
+    *mask <<= 1;
 }
 
-struct chk chk_y(int x, int y, char p) {
-    int inv = 0;
-    int end = 0;
-    int score = 0;
-    int mask;
-    int ptn = 0;
+struct chk chk_x(int x, int y, char p, int g) {
+    struct chk out = {0, 0, 0, 0};
+    int mask = 1;
     
-    ptn = 0;
-    mask = 1;
-    for(int c=y-1; 0<=c; c--)
-        swchk(x, c, p, &inv, &end, &c, mask, &ptn);
-    poten(inv, end, mask, ptn, &score);
+    dchk(&out, x, y, -1, 0, &mask, p, g);
+    dchk(&out, x, y,  1, 0, &mask, p, g);
     
-    ptn = 0;
-    mask = 2;
-    for(int c=y+1; 0<=c && c<BOARD_SIZE; c++)
-        swchk(x, c, p, &inv, &end, &c, mask, &ptn);
-    poten(inv, end, mask, ptn, &score);
+    return out;
+}
+
+struct chk chk_y(int x, int y, char p, int g) {
+    struct chk out = {0, 0, 0, 0};
+    int mask = 1;
     
-    struct chk c = { inv, end, shift(inv, end, mask), score };
-    return c;
+    dchk(&out, x, y, 0, -1, &mask, p, g);
+    dchk(&out, x, y, 0,  1, &mask, p, g);
+    
+    return out;
+}
+
+struct chk chk_d(int x, int y, char p, int g) {
+    struct chk out = {0, 0, 0, 0};
+    int mask = 1;
+    
+    dchk(&out, x, y, -1, -1, &mask, p, g);
+    dchk(&out, x, y,  1,  1, &mask, p, g);
+    dchk(&out, x, y, -1,  1, &mask, p, g);
+    dchk(&out, x, y,  1, -1, &mask, p, g);
+    
+    return out;
 }
 
 int check(int x, int y, char p, int *s) {
@@ -313,9 +298,9 @@ int check(int x, int y, char p, int *s) {
     || !(0 <= y && y < BOARD_SIZE))
         return -1;
     
-    struct chk _x = chk_x(x, y, p);
-    struct chk _y = chk_y(x, y, p);
-    struct chk _d = chk_d(x, y, p);
+    struct chk _x = chk_x(x, y, p, 0);
+    struct chk _y = chk_y(x, y, p, 0);
+    struct chk _d = chk_d(x, y, p, 0);
     
     *s = _x.ptn + _y.ptn + _d.ptn;
     
@@ -362,50 +347,10 @@ void qkchk(char p) {
     }
 }
 
-void fchk(int x, int y, char p, int *c) {
-    if(board[x][y] == p)
-        *c = -512;
-    else if(board[x][y] != ESP)
-        board[x][y] = p;
-    else
-        *c = -512;
-}
-
-#define BOUND(c)        (0<=c && c<BOARD_SIZE)
-#define VALID(c,m)      (c.inv&m && c.end&m)
-
 void flip(int x, int y, char p) {
-    struct chk _x = chk_x(x, y, p);
-    struct chk _y = chk_y(x, y, p);
-    struct chk _d = chk_d(x, y, p);
-    
-    for(int c=x-1; VALID(_x,1) && BOUND(c); c--)
-        fchk(c, y, p, &c);
-    
-    for(int c=x+1; VALID(_x,2) && BOUND(c); c++)
-        fchk(c, y, p, &c);
-    
-    for(int c=y-1; VALID(_y,1) && BOUND(c); c--)
-        fchk(x, c, p, &c);
-    
-    for(int c=y+1; VALID(_y,2) && BOUND(c); c++)
-        fchk(x, c, p, &c);
-    
-    for(int c=0; VALID(_d,1) && 0<=c && -1<(x-c) && -1<(y-c); c++)
-        if((x-c) != x && (y-c) != y)
-            fchk(x-c, y-c, p, &c);
-    
-    for(int c=0; VALID(_d,2) && 0<=c && (x+c)<BOARD_SIZE && (y+c)<BOARD_SIZE && c!=-1; c++)
-        if((x+c) != x && (y+c) != y)
-            fchk(x+c, y+c, p, &c);
-    
-    for(int c=0; VALID(_d,4) && 0<=c && -1<(x-c) && (y+c)<BOARD_SIZE; c++)
-        if((x-c) != x && (y+c) != y)
-            fchk(x-c, y+c, p, &c);
-    
-    for(int c=0; VALID(_d,8) && 0<=c && -1<(y-c) && (x+c)<BOARD_SIZE; c++)
-        if((x+c) != x && (y-c) != y)
-            fchk(x+c, y-c, p, &c);
+    chk_x(x, y, p, -1);
+    chk_y(x, y, p, -1);
+    chk_d(x, y, p, -1);
 }
 
 #define CORNER(c,i) (ptlist.cor[i][2]!=0 && c<ptlist.cor[i][2])
@@ -480,7 +425,6 @@ int bias(int s, int i) {
     if(good==2) s *= 2;
     return s;
 }
-
 
 void best(int points[2]) {
     int p = ptlist.len;
@@ -783,12 +727,12 @@ void play() {
                         break;
                     
                     case '1':
-                        if(1<wait)
-                            wait--;
+                        if(1<delay)
+                            delay--;
                         break;
                     
                     case '2':
-                        wait++;
+                        delay++;
                         break;
                     
                     case 'q':
@@ -816,7 +760,7 @@ void play() {
         #ifdef AUTO_TEST
         usleep(AUTO_TEST);
         #else
-        sleep(wait);
+        sleep(delay);
         #endif
         
         qkchk(YSP);
