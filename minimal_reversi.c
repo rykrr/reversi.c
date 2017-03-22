@@ -1,27 +1,124 @@
+/* Ryan Kerr :: Reversi.c           */
+/* Copyright (c) Ryan Kerr 2017     */
+
+/* Controls                         */
+/* Space:   Select                  */
+/* h,j,k,l: Move cursor             */
+/* arrows:  Move cursor             */
+/* q:       Quit                    */
+
+/* F1:      Help                    */
+
 #include <stdio.h>
 #include <ncurses.h>
+
+#include "minralg.h"
 
 #define BSIZE 26
 #define ACHAR 'X'
 #define BCHAR 'O'
 #define ECHAR '-'
 
+#define STATUS(f)\
+    attron(A_REVERSE|A_BOLD); f;\
+    attroff(A_REVERSE|A_BOLD)
+
+#define COLOR(f,a)\
+    if(has_colors()) {\
+        attron(COLOR_PAIR(a)); f;\
+        attroff(COLOR_PAIR(a));\
+    }
+
 struct chk {
     int val;
     int pts;
 };
 
-struct {
+struct point {
     int points[BSIZE*BSIZE][3];
     int length;
-} pts;
+};
 
-struct {
+struct board {
+    char b[BSIZE][BSIZE];
+    int s;
     int x;
     int y;
-} dim;
+};
 
-void init_curses() {
+struct scrdim {
+    int x;
+    int y;
+    int t;
+    int l;
+};
+
+void clear_row(struct scrdim *dim, int row) {
+    
+    for(int y=0; y<dim->y; y++)
+        mvprintw(row, y, " ");
+}
+
+void new_board(struct board *brd) {
+    
+    for(int i=0; i<brd->s; i++)
+        for(int j=0; j<brd->s; j++)
+            brd->b[i][j] = ECHAR;
+    
+    brd->b[brd->s/2  ][brd->s/2  ] = ACHAR;
+    brd->b[brd->s/2-1][brd->s/2  ] = BCHAR;
+    brd->b[brd->s/2  ][brd->s/2-1] = BCHAR;
+    brd->b[brd->s/2-1][brd->s/2-1] = ACHAR;
+}
+
+void print_cursor(struct board *brd, struct scrdim *dim, int x, int y) {
+    
+    attroff(A_REVERSE|A_BLINK);
+    attron(A_BOLD);
+    COLOR (
+        mvaddch(dim->t+brd->x, brd->y*2+dim->l+1, brd->b[brd->x][brd->y]),
+        (brd->b[brd->x][brd->y]==ECHAR?0:brd->b[brd->x][brd->y]==ACHAR?1:2)
+    );
+    
+    if(!x) x = -3;
+    if(!y) y = -3;
+    
+    if(x == -1 && -1<(brd->x-1))     x = brd->x-1;
+    if(y == -1 && -1<(brd->y-1))     y = brd->y-1;
+    
+    if(x == -2 && (brd->x+1)<brd->s) x = brd->x+1;
+    if(y == -2 && (brd->y+1)<brd->s) y = brd->y+1;
+    
+    if(x<0) x = brd->x;
+    if(y<0) y = brd->y;
+    
+    attron(A_REVERSE|A_BLINK|A_BOLD);
+    mvaddch(x+dim->t, y*2+dim->l+1, brd->b[x][y]);
+    attroff(A_REVERSE|A_BLINK|A_BOLD);
+    
+    brd->x=x;
+    brd->y=y;
+    
+    refresh();
+}
+
+void print_board(struct board *brd, struct scrdim *dim) {
+    
+    attron(A_BOLD);
+    for(int x=0; x<brd->s; x++) {
+        for(int y=0; y<brd->s; y++) {
+            COLOR (
+                mvprintw(dim->t+x, y*2+dim->l+1, "%c ", brd->b[x][y]),
+                (brd->b[x][y]==ECHAR?0:brd->b[x][y]==ACHAR?1:2)
+            );
+        }
+    }
+    attroff(A_BOLD);
+    refresh();
+}
+
+void init_curses(struct board *brd, struct scrdim *dim) {
+    
     initscr();
     curs_set(0);
     nonl();
@@ -29,111 +126,227 @@ void init_curses() {
     noecho();
     cbreak();
     
-    getmaxyx(stdscr, dim.x, dim.y);
+    getmaxyx(stdscr, dim->x, dim->y);
     
-    if(dim.y < BSIZE+4 || dim.x < BSIZE+2) {
+    if(dim->y < BSIZE+4 || dim->x < BSIZE+2) {
         endwin();
         printf("Screen too small to play game\n");
     }
-}
-
-void new_board(char board[BSIZE][BSIZE], int size) {
-    
-    for(int i=0; i<size; i++)
-        for(int j=0; j<size; j++)
-            board[i][j] = ECHAR;
-    
-    board[size/2  ][size/2  ] = ACHAR;
-    board[size/2-1][size/2  ] = BCHAR;
-    board[size/2  ][size/2-1] = BCHAR;
-    board[size/2-1][size/2-1] = ACHAR;
-}
-
-void print_board(char board[BSIZE][BSIZE], int size) {
-    
-    for(int i=-1; i<size; i++) {
-        
-        if(0<=i) printf("%c ", i+97);
-        else printf("  ");
-        
-        for(int j=0; j<size; j++) {
-            
-            if(i<0) printf("%c ", j+97);
-            else printf("%c ", board[i][j]);
-        }
-        
-        printf("\n");
+    else {
+        dim->t = (dim->x-brd->s)/2;
+        dim->l = (dim->y)/2-brd->s;
     }
+    
+    if(has_colors()) {
+        start_color();
+        init_pair(1, COLOR_RED,  COLOR_BLACK);
+        init_pair(2, COLOR_BLUE, COLOR_BLACK);
+    }
+    
+    for(int x=0; x<dim->x; x++)
+        for(int y=0; y<dim->y; y++)
+            mvprintw(x,y, " ");
+    
+    STATUS(clear_row(dim, 0));
+    STATUS(clear_row(dim, dim->x-1));
+    STATUS(mvprintw(0,0, " Reversi.c"));
+    STATUS(mvprintw(0, dim->y-15, "Ryan Kerr 2017"));
+    
+    print_board(brd, dim);
 }
 
-void check(char board[BSIZE][BSIZE], int size, int x, int y, int dx, int dy, char p, int *mask, int clevel, int flip, struct chk *result) {
+void check(struct board *brd, struct scrdim *dim, struct point *pts, int x, int y, int dx, int dy, char p, int *mask, int clevel, int flip, struct chk *result) {
     
     if(!clevel) {
         int m = 1;
         for(int i=-1; i<2; i++)
             for(int j=-1; j<2; j++)
                 if(i||j)
-                    check(board, size, x, y, i, j, p, &m, 1, flip, result);
+                    check(brd, dim, pts, x, y, i, j, p, &m, 1, flip, result);
         
         if(!flip && result->val) {
-            pts.points[pts.length][0]   = x;
-            pts.points[pts.length][1]   = y;
-            pts.points[pts.length++][2] = result->val;
+            pts->points[pts->length][0]   = x;
+            pts->points[pts->length][1]   = y;
+            pts->points[pts->length++][2] = result->val;
         }
         else if(flip && result->val) {
-            board[x][y] = p;
+            brd->b[x][y] = p;
         }
     }
     else {
         int cx=x+dx, cy=y+dy;
-        int inv = 0, end = 0, fin = 0;
+        int inv = 0;
         
-        while(!fin && 0<=cx && 0<=cy && cx<BSIZE && cy<BSIZE) {
+        while(0<=cx && 0<=cy && cx<brd->s && cy<brd->s
+              && brd->b[cx][cy] != ECHAR && brd->b[cx][cy] != p) {
             
-            if(board[cx][cy] == p) {
-                end++;
-                fin++;
-            }
-            else if(board[cx][cy] != ECHAR) {
-                inv++;
-                
-                if(flip==-1 && ((result->val>>*mask)&1))
-                    board[cx][cy] = p;
-            }
-            else {
-                fin++;
-            }
+            inv++;
             
-            if(flip!=-1 && end && inv) {
-                result->val |= 1<<*mask;
-                result->pts += inv;
+            mvprintw(20, 1, "%d :: %d :: %d     ", flip, *mask, ((result->val>>*mask)&1));
+            if(flip==-1 && ((result->val>>(*mask))&1)) {
+                mvprintw(0, 0, "%d ", result->val);
+                brd->b[cx][cy] = p;
             }
             
             cx+=dx;
             cy+=dy;
         }
         
+        if(flip!=-1 && 0<=cx && 0<=cy && cx<brd->s && cy<brd->s
+        && brd->b[cx][cy] == p && inv) {
+            
+            result->val |= 1<<*mask;
+            result->pts += inv;
+            mvprintw(1,1,"Verify: %d %c  ", inv, brd->b[cx][cy]);
+        }
+        
         if(flip==1)
-            check(board, size, x, y, dx, dy, p, mask, 1, -1, result);
-        (*mask) <<= 1;
+            check(brd, dim, pts, x, y, dx, dy, p, mask, 1, -1, result);
+        
+        if(flip!=-1)
+            (*mask) <<= 1;
+    }
+}
+
+int check_board(struct board *brd) {
+    
+    for(int x=0; x<brd->s; x++)
+        for(int y=0; y<brd->s; y++)
+            if(brd->b[x][y] == ECHAR)
+                return 1;
+    return 0;
+}
+
+void check_all(struct board *brd, struct point *pts, struct scrdim *dim, char c) {
+    
+    struct chk out = {0,0};
+    pts->length = 0;
+    
+    for(int x=0; x<brd->s; x++) {
+        for(int y=0; y<brd->s; y++) {
+            
+            out.val = out.pts = 0;
+            
+            if(brd->b[x][y]==ECHAR)
+                check(brd, dim, pts, x, y, 0, 0, c, 0, 0, 0, &out);
+        }
+    }
+}
+
+void hint(struct board *brd, struct point *pts, struct scrdim *dim) {
+    
+    for(int i=0; i<pts->length; i++)
+        brd->b[pts->points[i][0]][pts->points[i][1]] = '#';
+    print_board(brd, dim);
+    
+    getch();
+    
+    for(int i=0; i<pts->length; i++)
+        brd->b[pts->points[i][0]][pts->points[i][1]] = ECHAR;
+    print_board(brd, dim);
+}
+
+void loop(struct board *brd, struct point *pts, struct scrdim *dim) {
+    char c = 0;
+    int no_op = 0;
+    
+    while(check_board(brd) && no_op<1) {
+        
+        struct chk out = {0,0};
+        
+        pts->length = 0;
+        check_all(brd, pts, dim, ACHAR);
+        
+        if(0<pts->length) {
+            int go = 0;
+            no_op = 0;
+            
+            hint(brd, pts, dim);
+            
+            do {
+                switch(c = getch()) {
+                    case 'h':
+                        print_cursor(brd, dim, 0, -1);
+                        break;
+                    
+                    case 'l':
+                        print_cursor(brd, dim, 0, -2);
+                        break;
+                    
+                    case 'k':
+                        print_cursor(brd, dim, -1, 0);
+                        break;
+                    
+                    case 'j':
+                        print_cursor(brd, dim, -2, 0);
+                        break;
+                    
+                    case 10:
+                    case 7:
+                    case ' ':
+                        for(int i=0; i<pts->length && !go; i++)
+                            if(pts->points[i][0] == brd->x
+                            && pts->points[i][1] == brd->y)
+                                go = 1;
+                        
+                        if(go)
+                            mvprintw(dim->x-1, dim->y-10, "  Valid  ");
+                        else
+                            mvprintw(dim->x-1, dim->y-10, " Invalid ");
+                        
+                        break;
+                }
+            } while(!go);
+            
+            check(brd, dim, pts, brd->x, brd->y, 0, 0, ACHAR, 0, 0, 1, &out);
+            print_board(brd, dim);
+        }
+        else {
+            no_op++;
+        }
+        
+        pts->length = 0;
+        check_all(brd, pts, dim, BCHAR);
+        if(0<pts->length) {
+            
+            hint(brd, pts, dim);
+            struct chk out = {0,0};
+            check(brd, dim, pts, pts->points[0][0], pts->points[0][1],
+                    0, 0, BCHAR, 0, 0, 1, &out);
+            print_board(brd, dim);
+            
+            break;
+        }
+        else {
+            no_op++;
+        }
     }
 }
 
 int main(void) {
     
-    char board[BSIZE][BSIZE];
-    int size = 8;
+    struct board brd;
+    struct point pts;
+    struct scrdim dim;
+    
+    brd.x = brd.y = brd.s = 0;
+    dim.x = dim.y = dim.t = dim.l = 0;
+    pts.length = 0;
     
     do {
         printf("Enter a size (<%d): ", BSIZE);
-        scanf("%d", &size);
-    } while(size<8 || BSIZE<size);
+        scanf("%d", &brd.s);
+    } while(brd.s<8 || BSIZE<brd.s);
     
-    if(size%2!=0) size--;
-    new_board(board, size);
-    print_board(board, size);
+    init_curses(&brd, &dim);
+    if(brd.s%2!=0) brd.s--;
     
-    struct chk out = {0,0};
-    check(board, size, 1, 3, 0, 0, BCHAR, 0, 0, 1, &out);
-    print_board(board, size);
+    new_board(&brd);
+    print_board(&brd, &dim);
+    print_cursor(&brd, &dim, 0, 0);
+    
+    loop(&brd, &pts, &dim);
+    
+    getch();
+    endwin();
 }
