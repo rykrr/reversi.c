@@ -10,6 +10,7 @@
 /* F1:      Help                    */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <ncurses.h>
 
 #include "minralg.h"
@@ -117,7 +118,78 @@ void print_board(struct board *brd, struct scrdim *dim) {
     refresh();
 }
 
+void hint(struct board *brd, struct point *pts, struct scrdim *dim) {
+    
+    for(int i=0; i<pts->length; i++)
+        brd->b[pts->points[i][0]][pts->points[i][1]] = '#';
+    print_board(brd, dim);
+    
+    getch();
+    
+    for(int i=0; i<pts->length; i++)
+        brd->b[pts->points[i][0]][pts->points[i][1]] = ECHAR;
+    print_board(brd, dim);
+}
+
+void print_score(struct scrdim *dim, const char *status, int a, int b, int c, int d, int e) {
+    
+    STATUS(clear_row(dim, dim->x-1));
+    STATUS(mvprintw(dim->x-1,1, status, a, b, c, d, e));
+}
+
+void score(struct board *brd, struct chk *scr, struct scrdim *dim) {
+    
+    scr->val=scr->pts=0; 
+    
+    for(int x=0; x<brd->s; x++) {
+        for(int y=0; y<brd->s; y++) {
+            if(brd->b[x][y]==ACHAR)
+                scr->val++;
+            else if(brd->b[x][y]==BCHAR)
+                scr->pts++;
+        }
+    }
+    
+    print_score(dim, "[%c: %d | %c: %d]", ACHAR, scr->val, BCHAR, scr->pts, 0);
+}
+
+void game_over(struct board *brd, struct chk *scr, struct scrdim *dim) {
+    
+    score(brd, scr, dim);
+    
+    if(scr->pts==scr->val)
+        print_score(dim, "Draw! [%c: %d | %c: %d]", ACHAR, scr->val, BCHAR, scr->pts, 0);
+    else if(scr->pts<scr->val)
+        print_score(dim, "Player %c Wins! [%c: %d | %c: %d]", ACHAR, ACHAR, scr->val, BCHAR, scr->pts);
+    else if(scr->val<scr->pts)
+        print_score(dim, "Player %c Wins! [%c: %d | %c: %d]", BCHAR, ACHAR, scr->val, BCHAR, scr->pts);
+    
+    getch();
+    getch();
+    
+    print_score(dim, "Do you want to play again? (y/n)", 0, 0, 0, 0, 0);
+    char r = getch();
+    
+    if(r=='n' || r=='N') {
+        endwin();
+        exit(0);
+    }
+}
+
+void quit(struct scrdim *dim) {
+    
+    print_score(dim, "Are you sure you want to quit? (y/n)", 0, 0, 0, 0, 0);
+    char r = getch();
+    
+    if(r=='y' || r=='Y') {
+        endwin();
+        exit(0);
+    }
+}
+
 void init_curses(struct board *brd, struct scrdim *dim) {
+    
+    dim->x=dim->y=dim->t=dim->l = 0;
     
     initscr();
     curs_set(0);
@@ -128,7 +200,7 @@ void init_curses(struct board *brd, struct scrdim *dim) {
     
     getmaxyx(stdscr, dim->x, dim->y);
     
-    if(dim->y < BSIZE+4 || dim->x < BSIZE+2) {
+    if(dim->y < brd->s+4 || dim->x < brd->s+2) {
         endwin();
         printf("Screen too small to play game\n");
     }
@@ -155,10 +227,14 @@ void init_curses(struct board *brd, struct scrdim *dim) {
     print_board(brd, dim);
 }
 
-void check(struct board *brd, struct scrdim *dim, struct point *pts, int x, int y, int dx, int dy, char p, int *mask, int clevel, int flip, struct chk *result) {
+void check(struct board *brd, struct scrdim *dim, struct point *pts,
+           int x, int y, int dx, int dy, char p, int *mask, int clevel,
+           int flip, struct chk *result) {
     
     if(!clevel) {
         int m = 1;
+        result->val=result->pts=0;
+        
         for(int i=-1; i<2; i++)
             for(int j=-1; j<2; j++)
                 if(i||j)
@@ -182,28 +258,24 @@ void check(struct board *brd, struct scrdim *dim, struct point *pts, int x, int 
             
             inv++;
             
-            mvprintw(20, 1, "%d :: %d :: %d     ", flip, *mask, ((result->val>>*mask)&1));
-            if(flip==-1 && ((result->val>>(*mask))&1)) {
-                mvprintw(0, 0, "%d ", result->val);
+            if(flip==-1 && *mask&result->val)
                 brd->b[cx][cy] = p;
-            }
             
             cx+=dx;
             cy+=dy;
         }
         
-        if(flip!=-1 && 0<=cx && 0<=cy && cx<brd->s && cy<brd->s
+        if(-1<flip && 0<=cx && 0<=cy && cx<brd->s && cy<brd->s
         && brd->b[cx][cy] == p && inv) {
             
-            result->val |= 1<<*mask;
+            result->val |= *mask;
             result->pts += inv;
-            mvprintw(1,1,"Verify: %d %c  ", inv, brd->b[cx][cy]);
         }
         
         if(flip==1)
             check(brd, dim, pts, x, y, dx, dy, p, mask, 1, -1, result);
         
-        if(flip!=-1)
+        if(-1<flip)
             (*mask) <<= 1;
     }
 }
@@ -222,35 +294,18 @@ void check_all(struct board *brd, struct point *pts, struct scrdim *dim, char c)
     struct chk out = {0,0};
     pts->length = 0;
     
-    for(int x=0; x<brd->s; x++) {
-        for(int y=0; y<brd->s; y++) {
-            
-            out.val = out.pts = 0;
-            
+    for(int x=0; x<brd->s; x++)
+        for(int y=0; y<brd->s; y++)
             if(brd->b[x][y]==ECHAR)
                 check(brd, dim, pts, x, y, 0, 0, c, 0, 0, 0, &out);
-        }
-    }
-}
-
-void hint(struct board *brd, struct point *pts, struct scrdim *dim) {
-    
-    for(int i=0; i<pts->length; i++)
-        brd->b[pts->points[i][0]][pts->points[i][1]] = '#';
-    print_board(brd, dim);
-    
-    getch();
-    
-    for(int i=0; i<pts->length; i++)
-        brd->b[pts->points[i][0]][pts->points[i][1]] = ECHAR;
-    print_board(brd, dim);
 }
 
 void loop(struct board *brd, struct point *pts, struct scrdim *dim) {
     char c = 0;
     int no_op = 0;
+    struct chk scr = {0,0};
     
-    while(check_board(brd) && no_op<1) {
+    while(check_board(brd) && no_op<2) {
         
         struct chk out = {0,0};
         
@@ -261,10 +316,13 @@ void loop(struct board *brd, struct point *pts, struct scrdim *dim) {
             int go = 0;
             no_op = 0;
             
-            hint(brd, pts, dim);
-            
             do {
                 switch(c = getch()) {
+                    case KEY_RESIZE:
+                        endwin();
+                        init_curses(brd, dim);
+                        break;
+                        
                     case 'h':
                         print_cursor(brd, dim, 0, -1);
                         break;
@@ -279,6 +337,14 @@ void loop(struct board *brd, struct point *pts, struct scrdim *dim) {
                     
                     case 'j':
                         print_cursor(brd, dim, -2, 0);
+                        break;
+                        
+                    case 'p':
+                        hint(brd, pts, dim);
+                        break;
+                        
+                    case 'q':
+                        quit(dim);
                         break;
                     
                     case 10:
@@ -300,27 +366,43 @@ void loop(struct board *brd, struct point *pts, struct scrdim *dim) {
             
             check(brd, dim, pts, brd->x, brd->y, 0, 0, ACHAR, 0, 0, 1, &out);
             print_board(brd, dim);
+            print_cursor(brd, dim, 0, 0);
         }
         else {
             no_op++;
+            print_score(dim, "X has no moves, skipping!", 0, 0, 0, 0, 0);
+            getch();
         }
+        
+        score(brd, &scr, dim);
         
         pts->length = 0;
         check_all(brd, pts, dim, BCHAR);
+        
+        if(!(scr.val&&scr.pts) && check_board(brd))
+            break;
+        
         if(0<pts->length) {
             
-            hint(brd, pts, dim);
+            no_op=0;
             struct chk out = {0,0};
+            
             check(brd, dim, pts, pts->points[0][0], pts->points[0][1],
                     0, 0, BCHAR, 0, 0, 1, &out);
-            print_board(brd, dim);
             
-            break;
+            print_board(brd, dim);
+            refresh();
         }
         else {
             no_op++;
+            print_score(dim, "O has no moves, skipping!", 0, 0, 0, 0, 0);
+            getch();
         }
+        
+        print_cursor(brd, dim, 0, 0);
     }
+    
+    game_over(brd, &scr, dim);
 }
 
 int main(void) {
@@ -336,17 +418,16 @@ int main(void) {
     do {
         printf("Enter a size (<%d): ", BSIZE);
         scanf("%d", &brd.s);
-    } while(brd.s<8 || BSIZE<brd.s);
+    } while(brd.s<4 || BSIZE<brd.s);
     
-    init_curses(&brd, &dim);
     if(brd.s%2!=0) brd.s--;
+    init_curses(&brd, &dim);
     
-    new_board(&brd);
-    print_board(&brd, &dim);
-    print_cursor(&brd, &dim, 0, 0);
-    
-    loop(&brd, &pts, &dim);
-    
-    getch();
-    endwin();
+    for(;;) {
+        new_board(&brd);
+        print_board(&brd, &dim);
+        print_cursor(&brd, &dim, 0, 0);
+        
+        loop(&brd, &pts, &dim);
+    }
 }
