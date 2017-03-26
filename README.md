@@ -11,15 +11,13 @@ Features:
 | Key       | Function              |
 | --------- | --------------------- |
 | F1        | Help Menu             |
-| F2        | Cycle Difficulty      |
+| p         | hint                  |
 | q         | Quit                  |
 | h,j,k,l   | Move Cursor           |
 | arrows    | Move Cursor           |
 | Spacebar  | Select                |
-| 1         | Decrease Delay        |
-| 2         | Increase Delay        |
 
-### Compiler Flags
+### Compiler Flags (For old version)
 | Flag              | Description                       | Default Value |
 | ----------------- | --------------------------------- | ------------- |
 | MAX_BOARD_SIZE    | Set board size (prefer even)      | 50            |
