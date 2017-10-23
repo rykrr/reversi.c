@@ -572,7 +572,6 @@ void loop(struct board *brd, struct point *pts, struct scrdim *dim) {
             no_op=0;
             struct chk out = {0,0};
             
-            hint(brd,pts,dim);
             compute(brd, pts);
             check(brd, dim, pts, pts->points[0][0], pts->points[0][1],
                   0, 0, BCHAR, 0, 0, 1, &out);
